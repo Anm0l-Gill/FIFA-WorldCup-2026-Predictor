@@ -39,7 +39,6 @@ def add_result(df):
 def merge_rankings(results, rankings):
     rankings = rankings[["rank_date", "country_full", "rank", "total_points"]].copy()
 
-    # rankings are published monthly so we forward-fill to daily
     teams      = rankings["country_full"].unique()
     date_range = pd.date_range(rankings["rank_date"].min(), results["date"].max(), freq="D")
 
@@ -89,6 +88,28 @@ def add_features(df):
     df["is_friendly"] = (df["tournament"] == "Friendly").astype(int)
     return df
 
+def add_rolling_stats(df):
+    df = df.sort_values("date").reset_index(drop=True)
+
+    def rolling(df, team_col, score_col, concede_col, suffix):
+        stats = []
+        for team in df[team_col].unique():
+            mask    = df[team_col] == team
+            team_df = df[mask].copy()
+            team_df[f"goals_scored_{suffix}"]  = team_df[score_col].shift(1).rolling(5, min_periods=1).mean()
+            team_df[f"goals_conceded_{suffix}"] = team_df[concede_col].shift(1).rolling(5, min_periods=1).mean()
+            stats.append(team_df[["date", team_col,
+                                   f"goals_scored_{suffix}",
+                                   f"goals_conceded_{suffix}"]])
+        return pd.concat(stats).sort_values("date")
+
+    home_stats = rolling(df, "home_team", "home_score", "away_score", "home")
+    away_stats = rolling(df, "away_team", "away_score", "home_score", "away")
+
+    df = df.merge(home_stats, on=["date", "home_team"], how="left")
+    df = df.merge(away_stats, on=["date", "away_team"], how="left")
+    return df
+
 if __name__ == "__main__":
     results, rankings, elo = load_data()
 
@@ -99,20 +120,33 @@ if __name__ == "__main__":
     results = filter_cycle(results)
     results = add_result(results)
 
-    print("merging rankings (this takes ~20 seconds)...")
+    print("merging rankings...")
     results = merge_rankings(results, rankings)
 
     print("merging elo...")
     results = merge_elo(results, elo)
 
     results = add_features(results)
+    results = add_rolling_stats(results)
 
-    before  = len(results)
-    results = results.dropna(subset=["home_rank", "away_rank"])
-    print(f"dropped {before - len(results)} rows with missing rankings")
-    print(f"final dataset: {len(results)} matches")
-    print(results[["date", "home_team", "away_team", "home_rank", "away_rank",
-                   "home_elo", "away_elo", "rank_diff", "elo_diff", "result"]].head())
+    # full dataset — keep all matches that have rankings (used by Poisson + ML with rank features)
+    full = results.dropna(subset=["home_rank", "away_rank"])
+    print(f"full dataset: {len(full)} matches")
+    full.to_csv(PROCESSED / "match_features.csv", index=False)
 
-    results.to_csv(PROCESSED / "match_features.csv", index=False)
-    print("saved to data/processed/match_features.csv")
+    # model-ready with all features including elo (smaller, used as secondary check)
+    model_cols = ["rank_diff", "point_diff", "elo_diff", "is_friendly",
+                  "goals_scored_home", "goals_conceded_home",
+                  "goals_scored_away", "goals_conceded_away", "result"]
+
+    model_full = full.dropna(subset=["rank_diff", "point_diff",
+                                      "goals_scored_home", "goals_scored_away"])[model_cols]
+    print(f"model dataset (no elo required): {len(model_full)} matches")
+    model_full.to_csv(PROCESSED / "model_features.csv", index=False)
+
+    # elo subset — only WC teams, used to validate elo_diff matters
+    model_elo = full.dropna(subset=["home_elo", "away_elo"])[model_cols]
+    print(f"elo subset: {len(model_elo)} matches")
+    model_elo.to_csv(PROCESSED / "model_features_elo.csv", index=False)
+
+    print("done")
