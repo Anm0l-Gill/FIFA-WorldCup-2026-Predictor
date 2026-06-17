@@ -82,9 +82,13 @@ source venv/bin/activate
 # 3. install dependencies
 pip install -r requirements.txt
 
-# 4. download datasets — see data/raw/WHERE_TO_GET_DATA.txt for links
-#    place results.csv, fifa_ranking.csv, goalscorers.csv,
-#    shootouts.csv, teams_elo.csv in data/raw/
+# 4. add the following datasets to data/raw/ before running:
+#    - results.csv
+#    - goalscorers.csv
+#    - shootouts.csv
+#    - fifa_ranking.csv
+#    - teams_elo.csv
+#    - group_stage_probabilities.csv
 
 # 5. run the data pipeline
 python src/preprocessing.py
@@ -101,8 +105,8 @@ jupyter lab
 |---------|--------|
 | International match results (1872–2024) | [Kaggle — martj42](https://www.kaggle.com/datasets/martj42/international-football-results-from-1872-to-2017) |
 | FIFA world rankings (1992–2024) | [Kaggle — cashncarry](https://www.kaggle.com/datasets/cashncarry/fifaworldranking) |
-| Team ELO ratings | Private dataset |
-| Group stage probabilities | Private dataset |
+| Team ELO ratings | Private dataset — email gillanmoldeep2006@gmail.com for access |
+| Group stage probabilities | Private dataset — email gillanmoldeep2006@gmail.com for access |
 
 ---
 
